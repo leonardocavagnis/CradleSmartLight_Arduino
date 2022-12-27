@@ -1,18 +1,23 @@
 #include <ArduinoBLE.h>
+#include <Adafruit_NeoPixel.h>
+
+#define LED_PIN       6
+#define LED_NUM       30
+
+Adafruit_NeoPixel ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214"); // Bluetooth® Low Energy LED Service
-
 // Bluetooth® Low Energy LED Switch Characteristic - custom 128-bit UUID, read and writable by central
 BLEByteCharacteristic switchCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);
-
-const int ledPin = LED_BUILTIN; // pin to use for the LED
 
 void setup() {
   Serial.begin(9600);
   while (!Serial);
 
-  // set LED pin to output mode
-  pinMode(ledPin, OUTPUT);
+  // init LED strip
+  ledstrip.begin();
+  ledstrip.clear();
+  ledstrip.show();
 
   // begin initialization
   if (!BLE.begin()) {
@@ -22,7 +27,7 @@ void setup() {
   }
 
   // set advertised local name and service UUID:
-  BLE.setLocalName("LED");
+  BLE.setLocalName("CradleSmartLight");
   BLE.setAdvertisedService(ledService);
 
   // add the characteristic to the service
@@ -57,10 +62,18 @@ void loop() {
       if (switchCharacteristic.written()) {
         if (switchCharacteristic.value()) {   // any value other than 0
           Serial.println("LED on");
-          digitalWrite(ledPin, HIGH);         // will turn the LED on
+          
+          ledstrip.clear();
+          ledstrip.setBrightness(255);
+          for (int led_i=0; led_i<LED_NUM; led_i++) {
+            ledstrip.setPixelColor(led_i, ledstrip.Color(255, 255, 255));
+          }
+          ledstrip.show();
         } else {                              // a 0 value
           Serial.println(F("LED off"));
-          digitalWrite(ledPin, LOW);          // will turn the LED off
+          
+          ledstrip.clear();
+          ledstrip.show();
         }
       }
     }
