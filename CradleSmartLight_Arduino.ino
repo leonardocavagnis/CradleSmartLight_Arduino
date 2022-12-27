@@ -6,9 +6,10 @@
 
 Adafruit_NeoPixel ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214"); // Bluetooth® Low Energy LED Service
-// Bluetooth® Low Energy LED Switch Characteristic - custom 128-bit UUID, read and writable by central
-BLEByteCharacteristic switchCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);
+BLEService            cradlesmartlightService     ("c9ea4800-ad9e-4d67-b570-69352fdc1078");
+BLEByteCharacteristic ledstatusCharacteristic     ("c9ea4801-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
+BLEByteCharacteristic ledcolorCharacteristic      ("c9ea4802-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
+BLEByteCharacteristic ledbrightnessCharacteristic ("c9ea4803-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
 
 void setup() {
   Serial.begin(9600);
@@ -22,23 +23,26 @@ void setup() {
   // begin initialization
   if (!BLE.begin()) {
     Serial.println("starting Bluetooth® Low Energy module failed!");
-
     while (1);
   }
 
   // set advertised local name and service UUID:
   BLE.setLocalName("CradleSmartLight");
-  BLE.setAdvertisedService(ledService);
+  BLE.setAdvertisedService(cradlesmartlightService);
 
-  // add the characteristic to the service
-  ledService.addCharacteristic(switchCharacteristic);
-
+  // add the characteristics to the service
+  cradlesmartlightService.addCharacteristic(ledstatusCharacteristic);
+  cradlesmartlightService.addCharacteristic(ledcolorCharacteristic);
+  cradlesmartlightService.addCharacteristic(ledbrightnessCharacteristic);
+  
   // add service
-  BLE.addService(ledService);
+  BLE.addService(cradlesmartlightService);
 
   // set the initial value for the characeristic:
-  switchCharacteristic.writeValue(0);
-
+  ledstatusCharacteristic.writeValue(0);
+  ledcolorCharacteristic.writeValue(0);
+  ledbrightnessCharacteristic.writeValue(0); 
+  
   // start advertising
   BLE.advertise();
 
@@ -59,8 +63,8 @@ void loop() {
     while (central.connected()) {
       // if the remote device wrote to the characteristic,
       // use the value to control the LED:
-      if (switchCharacteristic.written()) {
-        if (switchCharacteristic.value()) {   // any value other than 0
+      if (ledstatusCharacteristic.written()) {
+        if (ledstatusCharacteristic.value()) {   // any value other than 0
           Serial.println("LED on");
           
           ledstrip.clear();
