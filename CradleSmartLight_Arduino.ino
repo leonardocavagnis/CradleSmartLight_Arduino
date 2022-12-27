@@ -1,7 +1,6 @@
 #include <ArduinoBLE.h>
 #include <Adafruit_NeoPixel.h>
-
-//TODO: Value in EEPROM
+#include <NanoBLEFlashPrefs.h>
 
 #define LED_PIN       6
 #define LED_NUM       30
@@ -13,11 +12,18 @@ BLEByteCharacteristic ledstatusCharacteristic     ("c9ea4801-ad9e-4d67-b570-6935
 BLECharacteristic     ledcolorCharacteristic      ("c9ea4802-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 3);
 BLEByteCharacteristic ledbrightnessCharacteristic ("c9ea4803-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
 
-bool          led_status      = false;
-unsigned char led_brightness  = 0;
-unsigned char led_color_red   = 0;
-unsigned char led_color_green = 0;
-unsigned char led_color_blue  = 0;
+NanoBLEFlashPrefs myFlashPrefs;
+
+typedef struct flashStruct
+{
+  bool led_status;
+  unsigned char led_brightness;
+  unsigned char led_color_red;
+  unsigned char led_color_green;
+  unsigned char led_color_blue;
+} flashPrefs;
+
+flashPrefs prefs;
 
 void setup() {
   Serial.begin(9600);
@@ -27,6 +33,35 @@ void setup() {
   ledstrip.begin();
   ledstrip.clear();
   ledstrip.show();
+  
+  Serial.println("Read record:");
+  int rc = myFlashPrefs.readPrefs(&prefs, sizeof(prefs));
+  if (rc == FDS_SUCCESS)
+  {
+    Serial.println("Preferences found: ");
+    Serial.println(prefs.led_status);
+    Serial.println(prefs.led_brightness);
+    Serial.println(prefs.led_color_red);
+    Serial.println(prefs.led_color_green);
+    Serial.println(prefs.led_color_blue);
+  } else {
+    Serial.print("No preferences found. Return code: ");
+    Serial.print(rc);
+    Serial.print(", ");
+    Serial.println(myFlashPrefs.errorString(rc));
+    prefs.led_status = false;
+    prefs.led_brightness = 0;
+    prefs.led_color_red = 0;
+    prefs.led_color_green = 0;
+    prefs.led_color_blue = 0;
+  }
+  Serial.println("");
+
+  ledstrip.setBrightness(prefs.led_brightness);
+  for (int led_i=0; led_i<LED_NUM; led_i++) {
+    ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_red, prefs.led_color_green, prefs.led_color_blue));
+  }
+  if(prefs.led_status) ledstrip.show();
 
   // begin initialization
   if (!BLE.begin()) {
@@ -72,20 +107,24 @@ void loop() {
       if (ledstatusCharacteristic.written()) {
         if (ledstatusCharacteristic.value()) {   
           Serial.println("LED on");
-          led_status = true;
+          prefs.led_status = true;
           
           ledstrip.clear();
-          ledstrip.setBrightness(led_brightness);
+          ledstrip.setBrightness(prefs.led_brightness);
           for (int led_i=0; led_i<LED_NUM; led_i++) {
-            ledstrip.setPixelColor(led_i, ledstrip.Color(led_color_red, led_color_green, led_color_blue));
+            ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_red, prefs.led_color_green, prefs.led_color_blue));
           }
           ledstrip.show();
+
+          myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         } else {                              
           Serial.println(F("LED off"));
-          led_status = false;
+          prefs.led_status = false;
           
           ledstrip.clear();
           ledstrip.show();
+
+          myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         }
       }
       
@@ -95,24 +134,28 @@ void loop() {
           unsigned char dataRawColor[3] = {};
           ledcolorCharacteristic.readValue(dataRawColor, 42);
 
-          led_color_red   = dataRawColor[0];
-          led_color_green = dataRawColor[1];
-          led_color_blue  = dataRawColor[2];
+          prefs.led_color_red   = dataRawColor[0];
+          prefs.led_color_green = dataRawColor[1];
+          prefs.led_color_blue  = dataRawColor[2];
 
           for (int led_i=0; led_i<LED_NUM; led_i++) {
-            ledstrip.setPixelColor(led_i, ledstrip.Color(led_color_red, led_color_green, led_color_blue));
+            ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_red, prefs.led_color_green, prefs.led_color_blue));
           }
 
-          if (led_status) ledstrip.show();
+          if (prefs.led_status) ledstrip.show();
+          
+          myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         }
       }
 
       // Check LedBrightness characteristic write
       if (ledbrightnessCharacteristic.written()) {
-        led_brightness = ledbrightnessCharacteristic.value();
-        ledstrip.setBrightness(led_brightness);
+        prefs.led_brightness = ledbrightnessCharacteristic.value();
+        ledstrip.setBrightness(prefs.led_brightness);
         
-        if (led_status) ledstrip.show();
+        if (prefs.led_status) ledstrip.show();
+
+        myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
 
     }
