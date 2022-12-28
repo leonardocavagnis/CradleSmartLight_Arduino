@@ -7,7 +7,7 @@
 
 #define PIR_PIN       3
 
-Adafruit_NeoPixel ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel     ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 BLEService            cradlesmartlightService     ("c9ea4800-ad9e-4d67-b570-69352fdc1078");
 BLEByteCharacteristic ledstatusCharacteristic     ("c9ea4801-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
@@ -15,7 +15,7 @@ BLECharacteristic     ledcolorCharacteristic      ("c9ea4802-ad9e-4d67-b570-6935
 BLEByteCharacteristic ledbrightnessCharacteristic ("c9ea4803-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
 BLEByteCharacteristic pirstatusCharacteristic     ("c9ea4804-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
 
-NanoBLEFlashPrefs myFlashPrefs;
+NanoBLEFlashPrefs     myFlashPrefs;
 
 typedef struct flashStruct
 {
@@ -39,14 +39,13 @@ void setup() {
   
   // init LED strip
   ledstrip.begin();
-  ledstrip.clear();
-  ledstrip.show();
-  
-  Serial.println("Read record:");
+  ledstrip_off();
+
+  // read persistent memory for parameters
+  Serial.println("Read memory...");
   int rc = myFlashPrefs.readPrefs(&prefs, sizeof(prefs));
-  if (rc == FDS_SUCCESS)
-  {
-    Serial.println("Preferences found: ");
+  if (rc == FDS_SUCCESS) {
+    Serial.println("Data found: ");
     Serial.println(prefs.led_status);
     Serial.println(prefs.led_brightness);
     Serial.println(prefs.led_color_rgb[0]);
@@ -54,45 +53,37 @@ void setup() {
     Serial.println(prefs.led_color_rgb[2]);
     Serial.println(prefs.pir_status);
   } else {
-    Serial.print("No preferences found. Return code: ");
-    Serial.print(rc);
-    Serial.print(", ");
-    Serial.println(myFlashPrefs.errorString(rc));
-    prefs.led_status = false;
-    prefs.led_brightness = 0;
-    prefs.led_color_rgb[0] = 0;
-    prefs.led_color_rgb[1] = 0;
-    prefs.led_color_rgb[2] = 0;
-    prefs.pir_status = false;
+    Serial.println("Data not found: set default.");
+    prefs.led_status        = false;
+    prefs.led_brightness    = 0;
+    prefs.led_color_rgb[0]  = 0;
+    prefs.led_color_rgb[1]  = 0;
+    prefs.led_color_rgb[2]  = 0;
+    prefs.pir_status        = false;
   }
-  Serial.println("");
 
-  ledstrip.setBrightness(prefs.led_brightness);
-  for (int led_i=0; led_i<LED_NUM; led_i++) {
-    ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
-  }
-  if(prefs.led_status) ledstrip.show();
+  if(prefs.led_status) ledstrip_on();
 
-  // begin initialization
+  // BLE initialization
   if (!BLE.begin()) {
-    Serial.println("starting Bluetooth® Low Energy module failed!");
+    Serial.println("starting BLE module failed!");
     while (1);
   }
 
-  // set advertised local name and service UUID:
+  // set advertised local name and service UUID
   BLE.setLocalName("CradleSmartLight");
   BLE.setAdvertisedService(cradlesmartlightService);
 
-  // add the characteristics to the service
+  // add the characteristics to the CradleSmartLight service
   cradlesmartlightService.addCharacteristic(ledstatusCharacteristic);
   cradlesmartlightService.addCharacteristic(ledcolorCharacteristic);
   cradlesmartlightService.addCharacteristic(ledbrightnessCharacteristic);
   cradlesmartlightService.addCharacteristic(pirstatusCharacteristic);
   
-  // add service
+  // add CradleSmartLight service
   BLE.addService(cradlesmartlightService);
 
-  // set the initial value for the characeristic:
+  // set the initial value for the characeristics
   ledstatusCharacteristic.writeValue(prefs.led_status);
   ledcolorCharacteristic.writeValue(prefs.led_color_rgb, 3);
   ledbrightnessCharacteristic.writeValue(prefs.led_brightness); 
@@ -101,7 +92,7 @@ void setup() {
   // start advertising
   BLE.advertise();
 
-  Serial.println("BLE LED Peripheral");
+  Serial.println("CradleSmartLight program starts");
 }
 
 void loop() {
@@ -111,15 +102,9 @@ void loop() {
     prefs.led_status = !prefs.led_status;
     Serial.println("PIR Detection");
     if (prefs.led_status) {
-      ledstrip.clear();
-      ledstrip.setBrightness(prefs.led_brightness);
-      for (int led_i=0; led_i<LED_NUM; led_i++) {
-        ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
-      }
-      ledstrip.show();
+      ledstrip_on();
     } else {
-      ledstrip.clear();
-      ledstrip.show();
+      ledstrip_off();
     }
   }
   valPIRprev = valPIR;
@@ -141,20 +126,14 @@ void loop() {
           Serial.println("LED on");
           prefs.led_status = true;
           
-          ledstrip.clear();
-          ledstrip.setBrightness(prefs.led_brightness);
-          for (int led_i=0; led_i<LED_NUM; led_i++) {
-            ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
-          }
-          ledstrip.show();
+          ledstrip_on();
 
           myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         } else {                              
           Serial.println(F("LED off"));
           prefs.led_status = false;
           
-          ledstrip.clear();
-          ledstrip.show();
+          ledstrip_off();
 
           myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         }
@@ -183,6 +162,7 @@ void loop() {
       // Check LedBrightness characteristic write
       if (ledbrightnessCharacteristic.written()) {
         prefs.led_brightness = ledbrightnessCharacteristic.value();
+        
         ledstrip.setBrightness(prefs.led_brightness);
         
         if (prefs.led_status) ledstrip.show();
@@ -202,4 +182,18 @@ void loop() {
     Serial.print(F("Disconnected from central: "));
     Serial.println(central.address());
   }
+}
+
+void ledstrip_on(){
+  ledstrip.clear();
+  ledstrip.setBrightness(prefs.led_brightness);
+  for (int led_i=0; led_i<LED_NUM; led_i++) {
+    ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
+  }
+  ledstrip.show();
+}
+
+void ledstrip_off(){
+  ledstrip.clear();
+  ledstrip.show();
 }
