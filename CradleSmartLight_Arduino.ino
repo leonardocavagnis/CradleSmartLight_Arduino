@@ -13,16 +13,16 @@ BLEService            cradlesmartlightService     ("c9ea4800-ad9e-4d67-b570-6935
 BLEByteCharacteristic ledstatusCharacteristic     ("c9ea4801-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
 BLECharacteristic     ledcolorCharacteristic      ("c9ea4802-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 3);
 BLEByteCharacteristic ledbrightnessCharacteristic ("c9ea4803-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
+BLEByteCharacteristic pirstatusCharacteristic     ("c9ea4804-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
 
 NanoBLEFlashPrefs myFlashPrefs;
 
 typedef struct flashStruct
 {
   bool led_status;
-  unsigned char led_brightness;
-  unsigned char led_color_red;
-  unsigned char led_color_green;
-  unsigned char led_color_blue;
+  byte led_brightness;
+  byte led_color_rgb[3];
+  bool pir_status;
 } flashPrefs;
 
 flashPrefs prefs;
@@ -49,9 +49,10 @@ void setup() {
     Serial.println("Preferences found: ");
     Serial.println(prefs.led_status);
     Serial.println(prefs.led_brightness);
-    Serial.println(prefs.led_color_red);
-    Serial.println(prefs.led_color_green);
-    Serial.println(prefs.led_color_blue);
+    Serial.println(prefs.led_color_rgb[0]);
+    Serial.println(prefs.led_color_rgb[1]);
+    Serial.println(prefs.led_color_rgb[2]);
+    Serial.println(prefs.pir_status);
   } else {
     Serial.print("No preferences found. Return code: ");
     Serial.print(rc);
@@ -59,15 +60,16 @@ void setup() {
     Serial.println(myFlashPrefs.errorString(rc));
     prefs.led_status = false;
     prefs.led_brightness = 0;
-    prefs.led_color_red = 0;
-    prefs.led_color_green = 0;
-    prefs.led_color_blue = 0;
+    prefs.led_color_rgb[0] = 0;
+    prefs.led_color_rgb[1] = 0;
+    prefs.led_color_rgb[2] = 0;
+    prefs.pir_status = false;
   }
   Serial.println("");
 
   ledstrip.setBrightness(prefs.led_brightness);
   for (int led_i=0; led_i<LED_NUM; led_i++) {
-    ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_red, prefs.led_color_green, prefs.led_color_blue));
+    ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
   }
   if(prefs.led_status) ledstrip.show();
 
@@ -85,13 +87,16 @@ void setup() {
   cradlesmartlightService.addCharacteristic(ledstatusCharacteristic);
   cradlesmartlightService.addCharacteristic(ledcolorCharacteristic);
   cradlesmartlightService.addCharacteristic(ledbrightnessCharacteristic);
+  cradlesmartlightService.addCharacteristic(pirstatusCharacteristic);
   
   // add service
   BLE.addService(cradlesmartlightService);
 
   // set the initial value for the characeristic:
-  ledstatusCharacteristic.writeValue(0);
-  ledbrightnessCharacteristic.writeValue(0); 
+  ledstatusCharacteristic.writeValue(prefs.led_status);
+  ledcolorCharacteristic.writeValue(prefs.led_color_rgb, 3);
+  ledbrightnessCharacteristic.writeValue(prefs.led_brightness); 
+  pirstatusCharacteristic.writeValue(prefs.pir_status);
   
   // start advertising
   BLE.advertise();
@@ -109,7 +114,7 @@ void loop() {
       ledstrip.clear();
       ledstrip.setBrightness(prefs.led_brightness);
       for (int led_i=0; led_i<LED_NUM; led_i++) {
-        ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_red, prefs.led_color_green, prefs.led_color_blue));
+        ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
       }
       ledstrip.show();
     } else {
@@ -139,7 +144,7 @@ void loop() {
           ledstrip.clear();
           ledstrip.setBrightness(prefs.led_brightness);
           for (int led_i=0; led_i<LED_NUM; led_i++) {
-            ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_red, prefs.led_color_green, prefs.led_color_blue));
+            ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
           }
           ledstrip.show();
 
@@ -159,14 +164,14 @@ void loop() {
       if (ledcolorCharacteristic.written()) {
         if (ledcolorCharacteristic.valueLength() == 3) {
           unsigned char dataRawColor[3] = {};
-          ledcolorCharacteristic.readValue(dataRawColor, 42);
+          ledcolorCharacteristic.readValue(dataRawColor, 3);
 
-          prefs.led_color_red   = dataRawColor[0];
-          prefs.led_color_green = dataRawColor[1];
-          prefs.led_color_blue  = dataRawColor[2];
+          prefs.led_color_rgb[0] = dataRawColor[0];
+          prefs.led_color_rgb[1] = dataRawColor[1];
+          prefs.led_color_rgb[2] = dataRawColor[2];
 
           for (int led_i=0; led_i<LED_NUM; led_i++) {
-            ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_red, prefs.led_color_green, prefs.led_color_blue));
+            ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
           }
 
           if (prefs.led_status) ledstrip.show();
