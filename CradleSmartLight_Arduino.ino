@@ -5,7 +5,9 @@
 #define LED_PIN       6
 #define LED_NUM       30
 
-#define PIR_PIN       3
+#define PIR_PIN             3
+#define PIR_MIN_BRIGHTNESS  10
+#define PIR_MAX_BRIGHTNESS  200
 
 Adafruit_NeoPixel     ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -27,8 +29,10 @@ typedef struct flashStruct
 
 flashPrefs prefs;
 
-bool valPIR = 0;
-bool valPIRprev = 0;
+bool          pir_val           = 0;
+bool          pir_val_prev      = 0;
+bool          pir_enabled       = false;
+unsigned long pir_turnon_millis = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -39,7 +43,6 @@ void setup() {
   
   // init LED strip
   ledstrip.begin();
-  ledstrip_off();
 
   // read persistent memory for parameters
   Serial.println("Read memory...");
@@ -62,7 +65,12 @@ void setup() {
     prefs.pir_status        = false;
   }
 
-  if(prefs.led_status) ledstrip_on();
+  if (prefs.led_status) {
+      if (prefs.pir_status) prefs.led_brightness = PIR_MIN_BRIGHTNESS;
+      ledstrip_on();
+  } else {
+      ledstrip_off();
+  }
 
   // BLE initialization
   if (!BLE.begin()) {
@@ -97,22 +105,12 @@ void setup() {
 
 void loop() {
   // Check PIR movement
-  valPIR = digitalRead(PIR_PIN);
-  if (valPIRprev == 0 && valPIR == 1 && prefs.pir_status == true) {
-    prefs.led_status = !prefs.led_status;
-    Serial.println("PIR Detection");
-    if (prefs.led_status) {
-      ledstrip_on();
-    } else {
-      ledstrip_off();
-    }
-  }
-  valPIRprev = valPIR;
+  pir_handler();
   
-  // listen for Bluetooth® Low Energy peripherals to connect:
+  // listen for BLE peripherals to connect
   BLEDevice central = BLE.central();
 
-  // if a central is connected to peripheral:
+  // if a central is connected to peripheral
   if (central) {
     Serial.print("Connected to central: ");
     // print the central's MAC address:
@@ -124,18 +122,24 @@ void loop() {
       if (ledstatusCharacteristic.written()) {
         if (ledstatusCharacteristic.value()) {   
           Serial.println("LED on");
-          prefs.led_status = true;
-          
-          ledstrip_on();
 
-          myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
+          if (prefs.led_status == false) {
+            prefs.led_status = true;
+            if (prefs.pir_status) prefs.led_brightness = PIR_MIN_BRIGHTNESS;
+            ledstrip_on();
+
+            myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
+          }  
         } else {                              
-          Serial.println(F("LED off"));
-          prefs.led_status = false;
-          
-          ledstrip_off();
+          Serial.println("LED off");
 
-          myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
+          if (prefs.led_status == true) {
+            prefs.led_status = false;
+            pir_enabled = false;
+            ledstrip_off();
+
+            myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
+          } 
         }
       }
       
@@ -165,7 +169,7 @@ void loop() {
         
         ledstrip.setBrightness(prefs.led_brightness);
         
-        if (prefs.led_status) ledstrip.show();
+        if (prefs.led_status && !prefs.pir_status) ledstrip.show();
 
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
@@ -173,6 +177,11 @@ void loop() {
       // Check PIRStatus characteristic write
       if (pirstatusCharacteristic.written()) {
         prefs.pir_status = pirstatusCharacteristic.value();
+        
+        if (prefs.led_status && prefs.pir_status) {
+          prefs.led_brightness = PIR_MIN_BRIGHTNESS;
+          ledstrip_on();
+        }
 
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
@@ -196,4 +205,26 @@ void ledstrip_on(){
 void ledstrip_off(){
   ledstrip.clear();
   ledstrip.show();
+}
+
+void pir_handler(){
+  pir_val = digitalRead(PIR_PIN);
+  
+  if (pir_val_prev == 0 && pir_val == 1 && prefs.pir_status == true && prefs.led_status == true) {
+      Serial.println("Move detected!");
+      pir_enabled           = true;
+      pir_turnon_millis     = millis();
+      prefs.led_brightness  = PIR_MAX_BRIGHTNESS;
+      ledstrip_on();
+  }
+
+  if (pir_enabled) {
+    if (millis() - pir_turnon_millis >= 10000) {
+      pir_enabled           = false;
+      prefs.led_brightness  = PIR_MIN_BRIGHTNESS;
+      ledstrip_on();
+    }
+  }
+  
+  pir_val_prev = pir_val;
 }
