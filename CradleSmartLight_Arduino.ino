@@ -5,6 +5,8 @@
 #define LED_PIN       6
 #define LED_NUM       30
 
+#define PIR_PIN       3
+
 Adafruit_NeoPixel ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 BLEService            cradlesmartlightService     ("c9ea4800-ad9e-4d67-b570-69352fdc1078");
@@ -25,10 +27,16 @@ typedef struct flashStruct
 
 flashPrefs prefs;
 
+bool valPIR = 0;
+bool valPIRprev = 0;
+
 void setup() {
   Serial.begin(9600);
   while (!Serial);
 
+  // init PIR sensor
+  pinMode(PIR_PIN, INPUT); 
+  
   // init LED strip
   ledstrip.begin();
   ledstrip.clear();
@@ -92,6 +100,25 @@ void setup() {
 }
 
 void loop() {
+  // Check PIR movement
+  valPIR = digitalRead(PIR_PIN);
+  if (valPIRprev == 0 && valPIR == 1) {
+    prefs.led_status = !prefs.led_status;
+    Serial.println("PIR Detection");
+    if (prefs.led_status) {
+      ledstrip.clear();
+      ledstrip.setBrightness(prefs.led_brightness);
+      for (int led_i=0; led_i<LED_NUM; led_i++) {
+        ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_red, prefs.led_color_green, prefs.led_color_blue));
+      }
+      ledstrip.show();
+    } else {
+      ledstrip.clear();
+      ledstrip.show();
+    }
+  }
+  valPIRprev = valPIR;
+  
   // listen for Bluetooth® Low Energy peripherals to connect:
   BLEDevice central = BLE.central();
 
