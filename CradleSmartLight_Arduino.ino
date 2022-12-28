@@ -107,7 +107,7 @@ void setup() {
 void loop() {
   // Check PIR movement
   valPIR = digitalRead(PIR_PIN);
-  if (valPIRprev == 0 && valPIR == 1) {
+  if (valPIRprev == 0 && valPIR == 1 && prefs.pir_status == true) {
     prefs.led_status = !prefs.led_status;
     Serial.println("PIR Detection");
     if (prefs.led_status) {
@@ -190,6 +190,12 @@ void loop() {
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
 
+      // Check PIRStatus characteristic write
+      if (pirstatusCharacteristic.written()) {
+        prefs.pir_status = pirstatusCharacteristic.value();
+
+        myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
+      }
     }
 
     // when the central disconnects, print it out:
