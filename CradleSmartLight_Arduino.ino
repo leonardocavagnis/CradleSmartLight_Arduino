@@ -168,9 +168,7 @@ void loop() {
       if (ledbrightnessCharacteristic.written()) {
         prefs.led_brightness = ledbrightnessCharacteristic.value();
         
-        ledstrip.setBrightness(prefs.led_brightness);
-        
-        if (prefs.led_status && !prefs.pir_status) ledstrip.show();
+        if (prefs.led_status && !prefs.pir_status) ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
 
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
