@@ -66,8 +66,8 @@ void setup() {
   }
 
   if (prefs.led_status) {
-      if (prefs.pir_status) prefs.led_brightness = PIR_MIN_BRIGHTNESS;
-      ledstrip_on();
+      if (prefs.pir_status) ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+      else ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
   } else {
       ledstrip_off();
   }
@@ -125,8 +125,9 @@ void loop() {
 
           if (prefs.led_status == false) {
             prefs.led_status = true;
-            if (prefs.pir_status) prefs.led_brightness = PIR_MIN_BRIGHTNESS;
-            ledstrip_on();
+            
+            if (prefs.pir_status) ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+            else ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
 
             myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
           }  
@@ -179,8 +180,7 @@ void loop() {
         prefs.pir_status = pirstatusCharacteristic.value();
         
         if (prefs.led_status && prefs.pir_status) {
-          prefs.led_brightness = PIR_MIN_BRIGHTNESS;
-          ledstrip_on();
+          ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
         }
 
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
@@ -193,11 +193,11 @@ void loop() {
   }
 }
 
-void ledstrip_on(){
+void ledstrip_on(byte brightness, byte color_r, byte color_g, byte color_b){
   ledstrip.clear();
-  ledstrip.setBrightness(prefs.led_brightness);
+  ledstrip.setBrightness(brightness);
   for (int led_i=0; led_i<LED_NUM; led_i++) {
-    ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
+    ledstrip.setPixelColor(led_i, ledstrip.Color(color_r, color_g, color_b));
   }
   ledstrip.show();
 }
@@ -214,15 +214,15 @@ void pir_handler(){
       Serial.println("Move detected!");
       pir_enabled           = true;
       pir_turnon_millis     = millis();
-      prefs.led_brightness  = PIR_MAX_BRIGHTNESS;
-      ledstrip_on();
+      
+      ledstrip_on(PIR_MAX_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
   }
 
   if (pir_enabled) {
     if (millis() - pir_turnon_millis >= 10000) {
       pir_enabled           = false;
-      prefs.led_brightness  = PIR_MIN_BRIGHTNESS;
-      ledstrip_on();
+      
+      ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
     }
   }
   
