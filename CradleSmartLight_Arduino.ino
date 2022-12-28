@@ -104,9 +104,6 @@ void setup() {
 }
 
 void loop() {
-  // Check PIR movement
-  pir_handler();
-  
   // listen for BLE peripherals to connect
   BLEDevice central = BLE.central();
 
@@ -118,6 +115,9 @@ void loop() {
 
     // while the central is still connected to peripheral:
     while (central.connected()) {
+      // Check PIR movement
+      pir_handler(); //FIXME: only in BLE connection
+
       // Check LedStatus characteristic write
       if (ledstatusCharacteristic.written()) {
         if (ledstatusCharacteristic.value()) {   
@@ -177,8 +177,12 @@ void loop() {
       if (pirstatusCharacteristic.written()) {
         prefs.pir_status = pirstatusCharacteristic.value();
         
-        if (prefs.led_status && prefs.pir_status) {
-          ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+        if (prefs.led_status) {
+          if(prefs.pir_status) {
+            ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+          } else {
+            ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+          }
         }
 
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
