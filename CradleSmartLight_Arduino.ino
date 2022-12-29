@@ -16,6 +16,8 @@ BLEByteCharacteristic ledstatusCharacteristic     ("c9ea4801-ad9e-4d67-b570-6935
 BLECharacteristic     ledcolorCharacteristic      ("c9ea4802-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 3);
 BLEByteCharacteristic ledbrightnessCharacteristic ("c9ea4803-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
 BLEByteCharacteristic pirstatusCharacteristic     ("c9ea4804-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
+BLECharacteristic     currenttimeCharacteristic   ("c9ea4805-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 6);
+BLECharacteristic     timerfeatureCharacteristic  ("c9ea4806-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 5);
 
 NanoBLEFlashPrefs     myFlashPrefs;
 
@@ -87,6 +89,8 @@ void setup() {
   cradlesmartlightService.addCharacteristic(ledcolorCharacteristic);
   cradlesmartlightService.addCharacteristic(ledbrightnessCharacteristic);
   cradlesmartlightService.addCharacteristic(pirstatusCharacteristic);
+  cradlesmartlightService.addCharacteristic(currenttimeCharacteristic);
+  cradlesmartlightService.addCharacteristic(timerfeatureCharacteristic);
   
   // add CradleSmartLight service
   BLE.addService(cradlesmartlightService);
@@ -96,6 +100,8 @@ void setup() {
   ledcolorCharacteristic.writeValue(prefs.led_color_rgb, 3);
   ledbrightnessCharacteristic.writeValue(prefs.led_brightness); 
   pirstatusCharacteristic.writeValue(prefs.pir_status);
+  //TODO: currenttimeCharacteristic.writeValue()
+  //TODO: timerfeatureCharacteristic.writeValue()
   
   // start advertising
   BLE.advertise();
