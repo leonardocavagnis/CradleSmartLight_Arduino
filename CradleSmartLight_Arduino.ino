@@ -104,6 +104,9 @@ void setup() {
 }
 
 void loop() {
+  // Check PIR movement (when BLE is disconnected)
+  pir_handler();
+  
   // listen for BLE peripherals to connect
   BLEDevice central = BLE.central();
 
@@ -115,8 +118,8 @@ void loop() {
 
     // while the central is still connected to peripheral:
     while (central.connected()) {
-      // Check PIR movement
-      pir_handler(); //FIXME: only in BLE connection
+      // Check PIR movement (when BLE is connected)
+      pir_handler();
 
       // Check LedStatus characteristic write
       if (ledstatusCharacteristic.written()) {
@@ -221,7 +224,8 @@ void pir_handler(){
   }
 
   if (pir_enabled) {
-    if (millis() - pir_turnon_millis >= 10000) {
+    if (millis() - pir_turnon_millis >= 30000) {
+      Serial.println("PIR Timeout expired");
       pir_enabled           = false;
       
       ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
