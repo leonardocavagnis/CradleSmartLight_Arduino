@@ -119,6 +119,8 @@ void setup() {
   pirstatusCharacteristic.writeValue(prefs.pir_status);
   currenttimeCharacteristic.writeValue(currenttime_init, 6);
   //TODO: timerfeatureCharacteristic.writeValue()
+
+  currenttimeCharacteristic.setEventHandler(BLERead, currenttimeCharacteristicRead);
   
   // start advertising
   BLE.advertise();
@@ -213,7 +215,7 @@ void loop() {
 
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
-
+      
       // Check CurrentTime characteristic write
       if (currenttimeCharacteristic.written()) {
         if (currenttimeCharacteristic.valueLength() == 6) {
@@ -278,4 +280,20 @@ void pir_handler(){
   }
   
   pir_val_prev = pir_val;
+}
+
+void currenttimeCharacteristicRead(BLEDevice central, BLECharacteristic characteristic) {
+  time_t seconds = time( NULL );
+  struct tm * currentTime;
+  currentTime = localtime(&seconds);
+  byte currenttime_init[6];
+  
+  currenttime_init[0] = currentTime->tm_hour;
+  currenttime_init[1] = currentTime->tm_min;
+  currenttime_init[2] = currentTime->tm_sec;
+  currenttime_init[3] = currentTime->tm_mday;
+  currenttime_init[4] = currentTime->tm_mon + 1;
+  currenttime_init[5] = (currentTime->tm_year + 1900) - 2000;
+  
+  currenttimeCharacteristic.writeValue(currenttime_init, 6);
 }
