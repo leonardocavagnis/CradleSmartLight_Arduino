@@ -1,6 +1,11 @@
 #include <ArduinoBLE.h>
 #include <Adafruit_NeoPixel.h>
 #include <NanoBLEFlashPrefs.h>
+#include "mbed.h"
+#include <time.h>
+
+//TODO 1: current time management (time lib + char)
+//TODO 2: timer feature
 
 #define LED_PIN       6
 #define LED_NUM       30
@@ -95,12 +100,24 @@ void setup() {
   // add CradleSmartLight service
   BLE.addService(cradlesmartlightService);
 
+  // get current time
+  time_t seconds = time( NULL );
+  struct tm * currentTime;
+  currentTime = localtime(&seconds);
+  byte currenttime_init[6];
+  currenttime_init[0] = currentTime->tm_hour;
+  currenttime_init[1] = currentTime->tm_min;
+  currenttime_init[2] = currentTime->tm_sec;
+  currenttime_init[3] = currentTime->tm_mday;
+  currenttime_init[4] = currentTime->tm_mon + 1;
+  currenttime_init[5] = (currentTime->tm_year + 1900) - 2000;
+  
   // set the initial value for the characeristics
   ledstatusCharacteristic.writeValue(prefs.led_status);
   ledcolorCharacteristic.writeValue(prefs.led_color_rgb, 3);
   ledbrightnessCharacteristic.writeValue(prefs.led_brightness); 
   pirstatusCharacteristic.writeValue(prefs.pir_status);
-  //TODO: currenttimeCharacteristic.writeValue()
+  currenttimeCharacteristic.writeValue(currenttime_init, 6);
   //TODO: timerfeatureCharacteristic.writeValue()
   
   // start advertising
@@ -156,7 +173,7 @@ void loop() {
       // Check LedColor characteristic write
       if (ledcolorCharacteristic.written()) {
         if (ledcolorCharacteristic.valueLength() == 3) {
-          unsigned char dataRawColor[3] = {};
+          byte dataRawColor[3] = {};
           ledcolorCharacteristic.readValue(dataRawColor, 3);
 
           prefs.led_color_rgb[0] = dataRawColor[0];
@@ -196,6 +213,28 @@ void loop() {
 
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
+
+      // Check CurrentTime characteristic write
+      if (currenttimeCharacteristic.written()) {
+        if (currenttimeCharacteristic.valueLength() == 6) {
+          byte currentTimeFromBle[6] = {};
+          currenttimeCharacteristic.readValue(currentTimeFromBle, 6);
+          
+          struct tm currentTime;
+          
+          currentTime.tm_hour = currentTimeFromBle[0];                  // hour (0-23)
+          currentTime.tm_min  = currentTimeFromBle[1];                  // minutes (0-59)
+          currentTime.tm_sec  = currentTimeFromBle[2];                  // seconds (0-59)
+          currentTime.tm_mday = currentTimeFromBle[3];                  // day of month (1-31)
+          currentTime.tm_mon  = currentTimeFromBle[4] - 1;              // month are from (0-11)
+          currentTime.tm_year = (2000 + currentTimeFromBle[5]) - 1900;  // years since 1900
+ 
+          set_time(mktime(&currentTime));
+
+          time_t seconds = time( NULL );
+          Serial.println(asctime(localtime(&seconds)));
+        }
+      }
     }
 
     // when the central disconnects, print it out:
@@ -205,7 +244,7 @@ void loop() {
 }
 
 void ledstrip_on(byte brightness, byte color_r, byte color_g, byte color_b){
-  ledstrip.clear();
+  ledstrip.clear();     
   ledstrip.setBrightness(brightness);
   for (int led_i=0; led_i<LED_NUM; led_i++) {
     ledstrip.setPixelColor(led_i, ledstrip.Color(color_r, color_g, color_b));
