@@ -142,6 +142,7 @@ void setup() {
   currenttimeCharacteristic.writeValue(currenttime_init, 6);
   timerfeatureCharacteristic.writeValue(timerfeature_init, 5);
 
+  // set read request handler for CurrentTime characteristic
   currenttimeCharacteristic.setEventHandler(BLERead, currenttimeCharacteristicRead);
   
   // start advertising
@@ -152,7 +153,7 @@ void setup() {
 
 void loop() {
   // Check PIR movement (when BLE is disconnected)
-  pir_handler();
+  timer_pir_handler();
   
   // listen for BLE peripherals to connect
   BLEDevice central = BLE.central();
@@ -166,7 +167,7 @@ void loop() {
     // while the central is still connected to peripheral:
     while (central.connected()) {
       // Check PIR movement (when BLE is connected)
-      pir_handler();
+      timer_pir_handler();
 
       // Check LedStatus characteristic write
       if (ledstatusCharacteristic.written()) {
@@ -255,6 +256,7 @@ void loop() {
  
           set_time(mktime(&currentTime));
 
+
           time_t seconds = time( NULL );
           Serial.println(asctime(localtime(&seconds)));
         }
@@ -262,12 +264,8 @@ void loop() {
 
       // Check TimerFeature characteristic write
       if (timerfeatureCharacteristic.written()) {
-        if (timerfeatureCharacteristic.valueLength() == 1) {
-          prefs.timer_status      = timerfeatureCharacteristic.value();
-
-          myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
-        } else if (timerfeatureCharacteristic.valueLength() == 5) {
-          byte timerFeatureData[6] = {};
+        if (timerfeatureCharacteristic.valueLength() == 5) {
+          byte timerFeatureData[5] = {};
           timerfeatureCharacteristic.readValue(timerFeatureData, 5);
           
           prefs.timer_status      = timerFeatureData[0];
@@ -338,4 +336,48 @@ void currenttimeCharacteristicRead(BLEDevice central, BLECharacteristic characte
   currenttime_init[5] = (currentTime->tm_year + 1900) - 2000;
   
   currenttimeCharacteristic.writeValue(currenttime_init, 6);
+
+  Serial.println(asctime(localtime(&seconds)));
+}
+
+void timer_pir_handler(){
+  if (prefs.led_status == true) {
+    if (prefs.pir_status == true && prefs.timer_status == false) {
+      pir_handler();
+    } else if (prefs.timer_status == true) {
+      time_t seconds = time( NULL );
+      struct tm * currentTime;
+      currentTime = localtime(&seconds);
+      
+      if (check_hhmm_interval(currentTime->tm_hour, currentTime->tm_min, prefs.timer_on_hh, prefs.timer_on_mm, prefs.timer_off_hh, prefs.timer_off_mm)) {
+        if (prefs.pir_status == true) {
+          pir_handler();
+        } else {
+          ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+        }
+      } else {
+        ledstrip_off();
+      }
+    }
+  }
+}
+
+bool check_hhmm_interval(byte check_hour, byte check_minute, byte start_hour, byte start_minute, byte end_hour, byte end_minute){   
+  if ((end_hour > start_hour) || (end_hour == start_hour && end_minute >= start_minute)) {
+      if ((check_hour > start_hour && check_hour < end_hour)      ||
+          (check_hour == start_hour && check_minute >= start_minute)  ||
+          (check_hour == end_hour && check_minute <= end_minute)      ) {
+        return true;
+    } else {
+        return false;
+    }
+  } else {
+    if ((check_hour > end_hour && check_hour < start_hour)      ||
+        (check_hour == end_hour && check_minute > end_minute)     ||
+        (check_hour == start_hour && check_minute < start_minute)   ) {
+        return false;
+    } else {
+        return true;
+    }  
+  }
 }
