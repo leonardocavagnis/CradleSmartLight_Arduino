@@ -4,8 +4,7 @@
 #include "mbed.h"
 #include <time.h>
 
-//TODO 1: current time management (time lib + char)
-//TODO 2: timer feature
+//TODO 1: timer feature
 
 #define LED_PIN       6
 #define LED_NUM       30
@@ -32,6 +31,11 @@ typedef struct flashStruct
   byte led_brightness;
   byte led_color_rgb[3];
   bool pir_status;
+  bool timer_status;
+  byte timer_on_hh;
+  byte timer_on_mm;
+  byte timer_off_hh;
+  byte timer_off_mm;
 } flashPrefs;
 
 flashPrefs prefs;
@@ -62,6 +66,11 @@ void setup() {
     Serial.println(prefs.led_color_rgb[1]);
     Serial.println(prefs.led_color_rgb[2]);
     Serial.println(prefs.pir_status);
+    Serial.println(prefs.timer_status);
+    Serial.println(prefs.timer_on_hh);
+    Serial.println(prefs.timer_on_mm);
+    Serial.println(prefs.timer_off_hh);
+    Serial.println(prefs.timer_off_mm);
   } else {
     Serial.println("Data not found: set default.");
     prefs.led_status        = false;
@@ -70,6 +79,11 @@ void setup() {
     prefs.led_color_rgb[1]  = 0;
     prefs.led_color_rgb[2]  = 0;
     prefs.pir_status        = false;
+    prefs.timer_status      = false;
+    prefs.timer_on_hh       = 0;
+    prefs.timer_on_mm       = 0;
+    prefs.timer_off_hh      = 0;
+    prefs.timer_off_mm      = 0;
   }
 
   if (prefs.led_status) {
@@ -111,6 +125,14 @@ void setup() {
   currenttime_init[3] = currentTime->tm_mday;
   currenttime_init[4] = currentTime->tm_mon + 1;
   currenttime_init[5] = (currentTime->tm_year + 1900) - 2000;
+
+  // get timer parameter
+  byte timerfeature_init[5];
+  timerfeature_init[0] = prefs.timer_status;
+  timerfeature_init[1] = prefs.timer_on_hh;
+  timerfeature_init[2] = prefs.timer_on_mm;
+  timerfeature_init[3] = prefs.timer_off_hh;
+  timerfeature_init[4] = prefs.timer_off_mm;
   
   // set the initial value for the characeristics
   ledstatusCharacteristic.writeValue(prefs.led_status);
@@ -118,7 +140,7 @@ void setup() {
   ledbrightnessCharacteristic.writeValue(prefs.led_brightness); 
   pirstatusCharacteristic.writeValue(prefs.pir_status);
   currenttimeCharacteristic.writeValue(currenttime_init, 6);
-  //TODO: timerfeatureCharacteristic.writeValue()
+  timerfeatureCharacteristic.writeValue(timerfeature_init, 5);
 
   currenttimeCharacteristic.setEventHandler(BLERead, currenttimeCharacteristicRead);
   
@@ -235,6 +257,26 @@ void loop() {
 
           time_t seconds = time( NULL );
           Serial.println(asctime(localtime(&seconds)));
+        }
+      }
+
+      // Check TimerFeature characteristic write
+      if (timerfeatureCharacteristic.written()) {
+        if (timerfeatureCharacteristic.valueLength() == 1) {
+          prefs.timer_status      = timerfeatureCharacteristic.value();
+
+          myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
+        } else if (timerfeatureCharacteristic.valueLength() == 5) {
+          byte timerFeatureData[6] = {};
+          timerfeatureCharacteristic.readValue(timerFeatureData, 5);
+          
+          prefs.timer_status      = timerFeatureData[0];
+          prefs.timer_on_hh       = timerFeatureData[1];
+          prefs.timer_on_mm       = timerFeatureData[2];
+          prefs.timer_off_hh      = timerFeatureData[3];
+          prefs.timer_off_mm      = timerFeatureData[4];
+          
+          myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         }
       }
     }
