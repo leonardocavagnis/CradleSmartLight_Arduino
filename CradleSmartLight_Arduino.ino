@@ -4,8 +4,6 @@
 #include "mbed.h"
 #include <time.h>
 
-//TODO 1: timer feature
-
 #define LED_PIN       6
 #define LED_NUM       30
 
