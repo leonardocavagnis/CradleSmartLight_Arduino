@@ -254,7 +254,6 @@ void loop() {
  
           set_time(mktime(&currentTime));
 
-
           time_t seconds = time( NULL );
           Serial.println(asctime(localtime(&seconds)));
         }
@@ -356,21 +355,25 @@ void timer_pir_handler(){
       } else {
         ledstrip_off();
       }
+    } else {
+      ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
     }
+  } else {
+    ledstrip_off();
   }
 }
 
 bool check_hhmm_interval(byte check_hour, byte check_minute, byte start_hour, byte start_minute, byte end_hour, byte end_minute){   
   if ((end_hour > start_hour) || (end_hour == start_hour && end_minute >= start_minute)) {
-      if ((check_hour > start_hour && check_hour < end_hour)      ||
-          (check_hour == start_hour && check_minute >= start_minute)  ||
+      if ((check_hour > start_hour && check_hour < end_hour)                                        ||
+          (check_hour == start_hour && check_minute >= start_minute && check_minute <= end_minute)  ||
           (check_hour == end_hour && check_minute <= end_minute)      ) {
         return true;
     } else {
         return false;
     }
   } else {
-    if ((check_hour > end_hour && check_hour < start_hour)      ||
+    if ((check_hour > end_hour && check_hour < start_hour)        ||
         (check_hour == end_hour && check_minute > end_minute)     ||
         (check_hour == start_hour && check_minute < start_minute)   ) {
         return false;
