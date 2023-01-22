@@ -270,6 +270,10 @@ void loop() {
           prefs.timer_on_mm       = timerFeatureData[2];
           prefs.timer_off_hh      = timerFeatureData[3];
           prefs.timer_off_mm      = timerFeatureData[4];
+
+          if (prefs.led_status == true && prefs.timer_status == false && prefs.pir_status == true) {
+            ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+          }
           
           myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         }
@@ -374,9 +378,10 @@ bool check_hhmm_interval(byte check_hour, byte check_minute, byte start_hour, by
         return false;
     }
   } else {
-    if ((check_hour > end_hour && check_hour < start_hour)        ||
-        (check_hour == end_hour && check_minute > end_minute)     ||
-        (check_hour == start_hour && check_minute < start_minute)   ) {
+      if ((check_hour > end_hour && check_hour < start_hour)                                      ||
+          (check_hour == end_hour && check_minute > end_minute && start_hour != end_hour)         ||
+          (check_hour == start_hour && check_minute < start_minute && start_hour != end_hour)     ||
+          (start_hour == end_hour && check_hour == end_hour && check_minute > end_minute && check_minute < start_minute) ) {
         return false;
     } else {
         return true;
