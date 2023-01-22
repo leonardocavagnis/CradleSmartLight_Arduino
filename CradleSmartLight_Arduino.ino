@@ -7,9 +7,7 @@
 #define LED_PIN       6
 #define LED_NUM       30
 
-#define PIR_PIN             3
-#define PIR_MIN_BRIGHTNESS  10
-#define PIR_MAX_BRIGHTNESS  200
+#define PIR_PIN       3
 
 Adafruit_NeoPixel     ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -17,7 +15,7 @@ BLEService            cradlesmartlightService     ("c9ea4800-ad9e-4d67-b570-6935
 BLEByteCharacteristic ledstatusCharacteristic     ("c9ea4801-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
 BLECharacteristic     ledcolorCharacteristic      ("c9ea4802-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 3);
 BLEByteCharacteristic ledbrightnessCharacteristic ("c9ea4803-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
-BLEByteCharacteristic pirstatusCharacteristic     ("c9ea4804-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite);
+BLECharacteristic     pirstatusCharacteristic     ("c9ea4804-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 2);
 BLECharacteristic     currenttimeCharacteristic   ("c9ea4805-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 6);
 BLECharacteristic     timerfeatureCharacteristic  ("c9ea4806-ad9e-4d67-b570-69352fdc1078", BLERead | BLEWrite, 5);
 
@@ -29,6 +27,7 @@ typedef struct flashStruct
   byte led_brightness;
   byte led_color_rgb[3];
   bool pir_status;
+  byte pir_brightness;
   bool timer_status;
   byte timer_on_hh;
   byte timer_on_mm;
@@ -64,6 +63,7 @@ void setup() {
     Serial.println(prefs.led_color_rgb[1]);
     Serial.println(prefs.led_color_rgb[2]);
     Serial.println(prefs.pir_status);
+    Serial.println(prefs.pir_brightness);
     Serial.println(prefs.timer_status);
     Serial.println(prefs.timer_on_hh);
     Serial.println(prefs.timer_on_mm);
@@ -77,6 +77,7 @@ void setup() {
     prefs.led_color_rgb[1]  = 0;
     prefs.led_color_rgb[2]  = 0;
     prefs.pir_status        = false;
+    prefs.pir_brightness    = 0;
     prefs.timer_status      = false;
     prefs.timer_on_hh       = 0;
     prefs.timer_on_mm       = 0;
@@ -85,7 +86,7 @@ void setup() {
   }
 
   if (prefs.led_status) {
-      if (prefs.pir_status) ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+      if (prefs.pir_status) ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
       else ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
   } else {
       ledstrip_off();
@@ -131,12 +132,17 @@ void setup() {
   timerfeature_init[2] = prefs.timer_on_mm;
   timerfeature_init[3] = prefs.timer_off_hh;
   timerfeature_init[4] = prefs.timer_off_mm;
+
+  // get pir parameter
+  byte pirfeature_init[2];
+  pirfeature_init[0] = prefs.pir_status;
+  pirfeature_init[1] = prefs.pir_brightness;
   
-  // set the initial value for the characeristics
+  // set the initial value for the characteristics
   ledstatusCharacteristic.writeValue(prefs.led_status);
   ledcolorCharacteristic.writeValue(prefs.led_color_rgb, 3);
   ledbrightnessCharacteristic.writeValue(prefs.led_brightness); 
-  pirstatusCharacteristic.writeValue(prefs.pir_status);
+  pirstatusCharacteristic.writeValue(pirfeature_init, 2);
   currenttimeCharacteristic.writeValue(currenttime_init, 6);
   timerfeatureCharacteristic.writeValue(timerfeature_init, 5);
 
@@ -175,7 +181,7 @@ void loop() {
           if (prefs.led_status == false) {
             prefs.led_status = true;
             
-            if (prefs.pir_status) ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+            if (prefs.pir_status) ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
             else ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
 
             myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
@@ -224,17 +230,22 @@ void loop() {
 
       // Check PIRStatus characteristic write
       if (pirstatusCharacteristic.written()) {
-        prefs.pir_status = pirstatusCharacteristic.value();
-        
-        if (prefs.led_status) {
-          if(prefs.pir_status) {
-            ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-          } else {
-            ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-          }
-        }
-
-        myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
+        if (pirstatusCharacteristic.valueLength() == 2) {
+            byte pirFeatureFromBle[2] = {};
+            pirstatusCharacteristic.readValue(pirFeatureFromBle, 2);
+            prefs.pir_status      = pirFeatureFromBle[0];
+            prefs.pir_brightness  = pirFeatureFromBle[1];
+            
+            if (prefs.led_status) {
+              if(prefs.pir_status) {
+                ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+              } else {
+                ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+              }
+            }
+    
+            myFlashPrefs.writePrefs(&prefs, sizeof(prefs));   
+        } 
       }
       
       // Check CurrentTime characteristic write
@@ -272,7 +283,7 @@ void loop() {
           prefs.timer_off_mm      = timerFeatureData[4];
 
           if (prefs.led_status == true && prefs.timer_status == false && prefs.pir_status == true) {
-            ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+            ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
           }
           
           myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
@@ -308,7 +319,7 @@ void pir_handler(){
       pir_enabled           = true;
       pir_turnon_millis     = millis();
       
-      ledstrip_on(PIR_MAX_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+      ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
   }
 
   if (pir_enabled) {
@@ -316,7 +327,7 @@ void pir_handler(){
       Serial.println("PIR Timeout expired");
       pir_enabled           = false;
       
-      ledstrip_on(PIR_MIN_BRIGHTNESS, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+      ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
     }
   }
   
