@@ -4,10 +4,11 @@
 #include "mbed.h"
 #include <time.h>
 
-#define LED_PIN       6
-#define LED_NUM       30
+#define LED_PIN        6
+#define LED_NUM        30
 
-#define PIR_PIN       3
+#define PIR_PIN        3
+#define PIR_ONTIME_MS  30000
 
 Adafruit_NeoPixel     ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -51,6 +52,7 @@ void setup() {
   
   // init LED strip
   ledstrip.begin();
+  ledstrip_off();
 
   // read persistent memory for parameters
   Serial.println("Read memory...");
@@ -83,13 +85,6 @@ void setup() {
     prefs.timer_on_mm       = 0;
     prefs.timer_off_hh      = 0;
     prefs.timer_off_mm      = 0;
-  }
-
-  if (prefs.led_status) {
-      if (prefs.pir_status) ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-      else ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-  } else {
-      ledstrip_off();
   }
 
   // BLE initialization
@@ -156,8 +151,8 @@ void setup() {
 }
 
 void loop() {
-  // Check PIR movement (when BLE is disconnected)
-  timer_pir_handler();
+  // Led control logic (when BLE is disconnected)
+  led_logic_handler();
   
   // listen for BLE peripherals to connect
   BLEDevice central = BLE.central();
@@ -165,38 +160,17 @@ void loop() {
   // if a central is connected to peripheral
   if (central) {
     Serial.print("Connected to central: ");
-    // print the central's MAC address:
     Serial.println(central.address());
 
-    // while the central is still connected to peripheral:
     while (central.connected()) {
-      // Check PIR movement (when BLE is connected)
-      timer_pir_handler();
+      // Led control logic (when BLE is connected)
+      led_logic_conn_handler();
 
       // Check LedStatus characteristic write
       if (ledstatusCharacteristic.written()) {
-        if (ledstatusCharacteristic.value()) {   
-          Serial.println("LED on");
+        prefs.led_status = ledstatusCharacteristic.value();
 
-          if (prefs.led_status == false) {
-            prefs.led_status = true;
-            
-            if (prefs.pir_status) ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-            else ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-
-            myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
-          }  
-        } else {                              
-          Serial.println("LED off");
-
-          if (prefs.led_status == true) {
-            prefs.led_status = false;
-            pir_enabled = false;
-            ledstrip_off();
-
-            myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
-          } 
-        }
+        myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
       
       // Check LedColor characteristic write
@@ -208,12 +182,6 @@ void loop() {
           prefs.led_color_rgb[0] = dataRawColor[0];
           prefs.led_color_rgb[1] = dataRawColor[1];
           prefs.led_color_rgb[2] = dataRawColor[2];
-
-          for (int led_i=0; led_i<LED_NUM; led_i++) {
-            ledstrip.setPixelColor(led_i, ledstrip.Color(prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]));
-          }
-
-          if (prefs.led_status) ledstrip.show();
           
           myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         }
@@ -223,8 +191,6 @@ void loop() {
       if (ledbrightnessCharacteristic.written()) {
         prefs.led_brightness = ledbrightnessCharacteristic.value();
         
-        if (prefs.led_status && !prefs.pir_status) ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-
         myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
       }
 
@@ -235,14 +201,6 @@ void loop() {
             pirstatusCharacteristic.readValue(pirFeatureFromBle, 2);
             prefs.pir_status      = pirFeatureFromBle[0];
             prefs.pir_brightness  = pirFeatureFromBle[1];
-            
-            if (prefs.led_status) {
-              if(prefs.pir_status) {
-                ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-              } else {
-                ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-              }
-            }
     
             myFlashPrefs.writePrefs(&prefs, sizeof(prefs));   
         } 
@@ -281,17 +239,12 @@ void loop() {
           prefs.timer_on_mm       = timerFeatureData[2];
           prefs.timer_off_hh      = timerFeatureData[3];
           prefs.timer_off_mm      = timerFeatureData[4];
-
-          if (prefs.led_status == true && prefs.timer_status == false && prefs.pir_status == true) {
-            ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-          }
           
           myFlashPrefs.writePrefs(&prefs, sizeof(prefs));
         }
       }
     }
 
-    // when the central disconnects, print it out:
     Serial.print(F("Disconnected from central: "));
     Serial.println(central.address());
   }
@@ -314,28 +267,28 @@ void ledstrip_off(){
 void pir_handler(){
   pir_val = digitalRead(PIR_PIN);
   
-  if (pir_val_prev == 0 && pir_val == 1 && prefs.pir_status == true && prefs.led_status == true) {
-      Serial.println("Move detected!");
-      pir_enabled           = true;
-      pir_turnon_millis     = millis();
-      
-      ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+  if (pir_val_prev == 0 && pir_val == 1) {
+    Serial.println("Move detected!");
+    pir_enabled           = true;
+    pir_turnon_millis     = millis();
+    
+    ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
   }
 
   if (pir_enabled) {
-    if (millis() - pir_turnon_millis >= 30000) {
+    if (millis() - pir_turnon_millis >= PIR_ONTIME_MS) {
       Serial.println("PIR Timeout expired");
       pir_enabled           = false;
-      
-      ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
     }
+  } else {
+    ledstrip_on(prefs.pir_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
   }
   
   pir_val_prev = pir_val;
 }
 
 void currenttimeCharacteristicRead(BLEDevice central, BLECharacteristic characteristic) {
-  time_t seconds = time( NULL );
+  time_t seconds = time(NULL);
   struct tm * currentTime;
   currentTime = localtime(&seconds);
   byte currenttime_init[6];
@@ -350,32 +303,6 @@ void currenttimeCharacteristicRead(BLEDevice central, BLECharacteristic characte
   currenttimeCharacteristic.writeValue(currenttime_init, 6);
 
   Serial.println(asctime(localtime(&seconds)));
-}
-
-void timer_pir_handler(){
-  if (prefs.led_status == true) {
-    if (prefs.pir_status == true && prefs.timer_status == false) {
-      pir_handler();
-    } else if (prefs.timer_status == true) {
-      time_t seconds = time( NULL );
-      struct tm * currentTime;
-      currentTime = localtime(&seconds);
-      
-      if (check_hhmm_interval(currentTime->tm_hour, currentTime->tm_min, prefs.timer_on_hh, prefs.timer_on_mm, prefs.timer_off_hh, prefs.timer_off_mm)) {
-        if (prefs.pir_status == true) {
-          pir_handler();
-        } else {
-          ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-        }
-      } else {
-        ledstrip_off();
-      }
-    } else {
-      ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
-    }
-  } else {
-    ledstrip_off();
-  }
 }
 
 bool check_hhmm_interval(byte check_hour, byte check_minute, byte start_hour, byte start_minute, byte end_hour, byte end_minute){   
@@ -397,5 +324,35 @@ bool check_hhmm_interval(byte check_hour, byte check_minute, byte start_hour, by
     } else {
         return true;
     }  
+  }
+}
+
+void led_logic_conn_handler(){
+  if (prefs.led_status == true) {
+    if (prefs.pir_status == true) {
+      pir_handler();
+    } else {
+      ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+    }
+  } else {
+    ledstrip_off();
+  }
+}
+
+void led_logic_handler(){
+  time_t seconds = time( NULL );
+  struct tm * currentTime;
+  currentTime = localtime(&seconds);
+
+  bool interval_status = check_hhmm_interval(currentTime->tm_hour, currentTime->tm_min, prefs.timer_on_hh, prefs.timer_on_mm, prefs.timer_off_hh, prefs.timer_off_mm);
+  
+  if ((prefs.led_status == false) || (prefs.led_status == true && prefs.timer_status == true && interval_status == false)) {
+    ledstrip_off();
+  } else {
+    if (prefs.pir_status == true) {
+      pir_handler();
+    } else {
+      ledstrip_on(prefs.led_brightness, prefs.led_color_rgb[0], prefs.led_color_rgb[1], prefs.led_color_rgb[2]);
+    }
   }
 }
