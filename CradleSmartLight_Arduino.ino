@@ -8,7 +8,7 @@
 #define LED_NUM        30
 
 #define PIR_PIN        3
-#define PIR_ONTIME_MS  30000
+#define PIR_ONTIME_MS  1 * 60 * 1000 //seconds
 
 Adafruit_NeoPixel     ledstrip(LED_NUM, LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -41,11 +41,15 @@ flashPrefs prefs;
 bool          pir_val           = 0;
 bool          pir_val_prev      = 0;
 bool          pir_enabled       = false;
+byte          prev_brightness       = 0;
+byte          prev_led_red       = 0;
+byte          prev_led_green       = 0;
+byte          prev_led_blue      = 0;
 unsigned long pir_turnon_millis = 0;
 
 void setup() {
   Serial.begin(9600);
-  while (!Serial);
+  //while (!Serial);
 
   // init PIR sensor
   pinMode(PIR_PIN, INPUT); 
@@ -251,15 +255,37 @@ void loop() {
 }
 
 void ledstrip_on(byte brightness, byte color_r, byte color_g, byte color_b){
-  ledstrip.clear();     
-  ledstrip.setBrightness(brightness);
-  for (int led_i=0; led_i<LED_NUM; led_i++) {
-    ledstrip.setPixelColor(led_i, ledstrip.Color(color_r, color_g, color_b));
-  }
-  ledstrip.show();
+  Serial.print("sb ");
+  Serial.println(prev_brightness);
+
+  Serial.print("eb ");
+  Serial.println(brightness);
+    int step = (prev_brightness < brightness) ? 1 : -1;
+
+    if (prev_brightness == brightness && (ledstrip.Color(color_r, color_g, color_b) != ledstrip.Color(prev_led_red, prev_led_green, prev_led_blue))){
+      for (int led_i=0; led_i<LED_NUM; led_i++) {
+        ledstrip.setPixelColor(led_i, ledstrip.Color(color_r, color_g, color_b));
+      }
+      ledstrip.show();
+    } else {
+      for (int b = prev_brightness; b != brightness; b += step){
+        ledstrip.setBrightness(b);
+        for (int led_i=0; led_i<LED_NUM; led_i++) {
+          ledstrip.setPixelColor(led_i, ledstrip.Color(color_r, color_g, color_b));
+        }
+        ledstrip.show();
+        delay(1);
+      }
+    }
+
+    prev_brightness = brightness;
+    prev_led_red = color_r;
+    prev_led_green = color_g;
+    prev_led_blue = color_b;
 }
 
 void ledstrip_off(){
+  //prev_brightness = 0;
   ledstrip.clear();
   ledstrip.show();
 }
